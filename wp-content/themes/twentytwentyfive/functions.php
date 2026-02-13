@@ -192,3 +192,44 @@ add_action('rest_api_init', function () {
     );
 });
 
+// Register RSVP API
+add_action('rest_api_init', function () {
+    register_rest_route('events/v1', '/rsvp', array(
+        'methods'  => 'POST',
+        'callback' => 'save_event_rsvp',
+        'permission_callback' => '__return_true',
+    ));
+});
+
+function save_event_rsvp($request) {
+    $params = $request->get_json_params();
+
+    $event_id = sanitize_text_field($params['event_id']);
+    $name = sanitize_text_field($params['name']);
+    $email = sanitize_email($params['email']);
+
+    // Save RSVP as custom post
+    $post_id = wp_insert_post(array(
+        'post_title' => $name . ' RSVP',
+        'post_type' => 'rsvp',
+        'post_status' => 'publish',
+    ));
+
+    update_post_meta($post_id, 'event_id', $event_id);
+    update_post_meta($post_id, 'name', $name);
+    update_post_meta($post_id, 'email', $email);
+
+    return array(
+        'status' => 'success',
+        'message' => 'RSVP saved'
+    );
+}
+
+add_action('init', function () {
+    register_post_type('rsvp', array(
+        'label' => 'RSVPs',
+        'public' => false,
+        'show_ui' => true,
+        'supports' => array('title'),
+    ));
+});

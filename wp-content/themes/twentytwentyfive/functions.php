@@ -175,7 +175,9 @@ add_action('rest_api_init', function () {
 });
 
 
-
+add_action('init', function() {
+    error_log("DEBUG TEST");
+});
 
 /* Custom code to display acf fields in custom post taxonomy Events Category REST API RESPONSE */
 
@@ -202,28 +204,36 @@ add_action('rest_api_init', function () {
 });
 
 function save_event_rsvp($request) {
+    error_log("RSVP CALLBACK HIT");
+
     $params = $request->get_json_params();
 
-    $event_id = sanitize_text_field($params['event_id']);
+    if (empty($params)) {
+        $params = $request->get_params();
+    }
+
+    error_log(print_r($params, true));
+
+    $event_id = intval($params['event_id']);
     $name = sanitize_text_field($params['name']);
     $email = sanitize_email($params['email']);
 
-    // Save RSVP as custom post
-    $post_id = wp_insert_post(array(
+    $post_id = wp_insert_post([
         'post_title' => $name . ' RSVP',
         'post_type' => 'rsvp',
         'post_status' => 'publish',
-    ));
+    ]);
 
     update_post_meta($post_id, 'event_id', $event_id);
     update_post_meta($post_id, 'name', $name);
     update_post_meta($post_id, 'email', $email);
 
-    return array(
+    return [
         'status' => 'success',
-        'message' => 'RSVP saved'
-    );
+        'post_id' => $post_id
+    ];
 }
+
 
 add_action('init', function () {
     register_post_type('rsvp', array(

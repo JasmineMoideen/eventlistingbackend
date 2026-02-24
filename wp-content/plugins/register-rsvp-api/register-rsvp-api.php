@@ -56,6 +56,18 @@ function save_event_rsvp($request)
 
     $event_title = get_the_title($event_id);
 
+
+    // ---------- RSVP limit check ----------
+$limit = (int) get_post_meta($event_id, 'rsvp_limit', true);
+$current_count = get_event_rsvp_count($event_id);
+
+if ($limit && $current_count >= $limit) {
+    return new WP_REST_Response([
+        'success' => false,
+        'message' => 'Sorry, this event is fully booked.',
+    ], 400);
+}
+
     if (!$event_title) {
         return new WP_REST_Response([
             'success' => false,
@@ -175,4 +187,45 @@ function render_rsvp_details($post)
     echo '<tr><th>Name</th><td>' . esc_html($name) . '</td></tr>';
     echo '<tr><th>Email</th><td>' . esc_html($email) . '</td></tr>';
     echo '</table>';
+}
+
+function get_event_rsvp_count($event_id) {
+    $query = new WP_Query([
+        'post_type'      => 'rsvp',
+        'post_status'    => 'publish',
+        'posts_per_page' => -1,
+        'fields'         => 'ids',
+        'meta_query'     => [
+            [
+                'key'   => 'event_id',
+                'value' => $event_id,
+            ],
+        ],
+    ]);
+
+    return $query->found_posts;
+}
+
+
+add_action('rest_api_init', function () {
+    register_rest_route('events/v1', '/event/(?P<id>\d+)', [
+        'methods'  => 'GET',
+        'callback' => 'get_event_with_rsvp',
+        'permission_callback' => '__return_true',
+    ]);
+});
+
+function get_event_with_rsvp($request) {
+    $event_id = intval($request['id']);
+
+    $limit = (int) get_post_meta($event_id, 'rsvp_limit', true);
+    $count = get_event_rsvp_count($event_id);
+    $remaining = max($limit - $count, 0);
+
+    return [
+        'event_id'        => $event_id,
+        'rsvp_limit'      => $limit,
+        'rsvp_count'      => $count,
+        'remaining_seats' => $remaining,
+    ];
 }

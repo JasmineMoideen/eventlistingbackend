@@ -1,0 +1,19 @@
+[06-Mar-2026 07:04:49 UTC] Automatic updates starting...
+[06-Mar-2026 07:04:50 UTC]   Automatic plugin updates starting...
+[06-Mar-2026 07:04:50 UTC]   Automatic plugin updates complete.
+[06-Mar-2026 07:04:52 UTC] Automatic updates complete.
+[06-Mar-2026 11:09:13 UTC] Automatic updates starting...
+[06-Mar-2026 11:09:15 UTC]   Automatic plugin updates starting...
+[06-Mar-2026 11:09:15 UTC]   Automatic plugin updates complete.
+[06-Mar-2026 11:09:17 UTC] Automatic updates complete.
+[06-Mar-2026 11:10:04 UTC] VERIFY PAYMENT CALLED
+[06-Mar-2026 11:10:04 UTC] Array
+(
+    [razorpay_payment_id] => pay_SNv06IkNvc3tcH
+    [razorpay_order_id] => order_SNuzrCsaRdhhz3
+    [razorpay_signature] => 0402a3fe8528a8f8dbfe15f05bb73ff9f0f24a08a07f0b2c63c70ea6f74b98ad
+    [email] => jasmine@webcastle.in
+    [event_id] => 27
+    [quantity] => 1
+)
+

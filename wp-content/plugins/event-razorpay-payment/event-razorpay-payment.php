@@ -119,13 +119,16 @@ class Event_Razorpay_Payments
     public function verify_payment($request)
     {
 
-        $order_id = sanitize_text_field($request['razorpay_order_id']);
-        $payment_id = sanitize_text_field($request['razorpay_payment_id']);
-        $signature = sanitize_text_field($request['razorpay_signature']);
+        $params = $request->get_json_params();
+        
 
-        $email = sanitize_email($request['email']);
-        $event_id = intval($request['event_id']);
-        $quantity = intval($request['quantity']);
+        $order_id   = sanitize_text_field($params['razorpay_order_id'] ?? '');
+        $payment_id = sanitize_text_field($params['razorpay_payment_id'] ?? '');
+        $signature  = sanitize_text_field($params['razorpay_signature'] ?? '');
+
+        $email      = sanitize_email($params['email'] ?? '');
+        $event_id   = intval($params['event_id'] ?? 0);
+        $quantity   = intval($params['quantity'] ?? 1);
 
         try {
 
@@ -202,11 +205,9 @@ add_action('add_meta_boxes', function () {
             echo '<tr><th>Order ID</th><td>' . esc_html($order_id) . '</td></tr>';
             echo '<tr><th>Quantity</th><td>' . esc_html($quantity) . '</td></tr>';
             echo '</table>';
-
         },
         'ticket_order',
         'normal',
         'high'
     );
-
 });

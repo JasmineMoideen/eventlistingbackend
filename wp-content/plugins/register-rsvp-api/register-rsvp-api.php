@@ -3,20 +3,30 @@
 /**
  * Plugin Name: Register RSVP API
  * Description: Register RSVP API
- * Version: 1.0
+ * Version: 1.1
  * Author: Jasmine
  */
-// Register rsvp custom post type
+
+if (!defined('ABSPATH')) exit;
+
+
+/**
+ * Register RSVP custom post type
+ */
 add_action('init', function () {
     register_post_type('rsvp', array(
         'label' => 'RSVPs',
         'public' => false,
         'show_ui' => true,
-        'supports' => array('title',),
+        'supports' => array('title'),
         'show_in_rest' => true,
     ));
 });
-// Register RSVP API
+
+
+/**
+ * Register RSVP API
+ */
 add_action('rest_api_init', function () {
 
     register_rest_route('events/v1', '/rsvp', [
@@ -26,8 +36,18 @@ add_action('rest_api_init', function () {
     ]);
 });
 
+
 function save_event_rsvp($request)
 {
+
+    // ---------- Ensure seats plugin exists ----------
+    if (!function_exists('event_get_seat_summary')) {
+        return new WP_REST_Response([
+            'success' => false,
+            'message' => 'Seat manager plugin not active.'
+        ], 500);
+    }
+
     // ---------- Get params ----------
     $params = $request->get_json_params();
     if (empty($params)) {
@@ -39,7 +59,7 @@ function save_event_rsvp($request)
     $name     = sanitize_text_field($params['name'] ?? '');
     $email    = strtolower(sanitize_email($params['email'] ?? ''));
 
-    // ---------- Basic validation ----------
+    // ---------- Validation ----------
     if (!$event_id || empty($name) || empty($email)) {
         return new WP_REST_Response([
             'success' => false,
@@ -56,24 +76,26 @@ function save_event_rsvp($request)
 
     $event_title = get_the_title($event_id);
 
-
-    // ---------- RSVP limit check ----------
-$limit = (int) get_post_meta($event_id, 'rsvp_limit', true);
-$current_count = get_event_rsvp_count($event_id);
-
-if ($limit && $current_count >= $limit) {
-    return new WP_REST_Response([
-        'success' => false,
-        'message' => 'Sorry, this event is fully booked.',
-    ], 400);
-}
-
     if (!$event_title) {
         return new WP_REST_Response([
             'success' => false,
             'message' => 'Invalid event.',
         ], 404);
     }
+
+
+    /**
+     * Check remaining seats using shared plugin
+     */
+    $seats = event_get_seat_summary($event_id);
+
+    if ($seats['remaining_seats'] <= 0) {
+        return new WP_REST_Response([
+            'success' => false,
+            'message' => 'Sorry, this event is fully booked.'
+        ], 400);
+    }
+
 
     // ---------- Duplicate check ----------
     $existing = new WP_Query([
@@ -101,6 +123,7 @@ if ($limit && $current_count >= $limit) {
         ], 409);
     }
 
+
     // ---------- Create RSVP ----------
     $post_id = wp_insert_post([
         'post_title'  => $name . ' RSVP - ' . $event_title,
@@ -115,54 +138,49 @@ if ($limit && $current_count >= $limit) {
         ], 500);
     }
 
+
     // ---------- Save meta ----------
     update_post_meta($post_id, 'event_id', $event_id);
     update_post_meta($post_id, 'event_name', $event_title);
     update_post_meta($post_id, 'name', $name);
     update_post_meta($post_id, 'email', $email);
 
+
     /* ---------- SEND EMAILS ---------- */
-
-    // Email to attendee
-    $user_subject = "RSVP Confirmation - " . $event_title;
-
-    $user_message =
-        "Hi $name,\n\n" .
-        "You have successfully RSVP'd for:\n\n" .
-        "Event: $event_title\n\n" .
-        "We look forward to seeing you there.\n\n" .
-        "Thank you.";
 
     wp_mail(
         $email,
-        $user_subject,
-        $user_message,
+        "RSVP Confirmation - " . $event_title,
+        "Hi $name,\n\nYou have successfully RSVP'd for:\n\nEvent: $event_title\n\nThank you.",
         ['Content-Type: text/plain; charset=UTF-8']
     );
 
-    // Email to admin
-    $admin_subject = "New RSVP Received";
-
-    $admin_message =
-        "A new RSVP has been submitted:\n\n" .
-        "Event: $event_title\n" .
-        "Name: $name\n" .
-        "Email: $email\n";
-
     wp_mail(
         get_option('admin_email'),
-        $admin_subject,
-        $admin_message
+        "New RSVP Received",
+        "Event: $event_title\nName: $name\nEmail: $email"
     );
 
-    // ---------- Success response ----------
+
+    /**
+     * Get updated seat data
+     */
+    $updated_seats = event_get_seat_summary($event_id);
+
+
     return new WP_REST_Response([
         'success' => true,
         'message' => 'RSVP submitted successfully.',
+        'remaining_seats' => $updated_seats['remaining_seats']
     ], 200);
 }
 
+
+/**
+ * Admin Meta Box
+ */
 add_action('add_meta_boxes', function () {
+
     add_meta_box(
         'rsvp_details',
         'RSVP Details',
@@ -187,45 +205,4 @@ function render_rsvp_details($post)
     echo '<tr><th>Name</th><td>' . esc_html($name) . '</td></tr>';
     echo '<tr><th>Email</th><td>' . esc_html($email) . '</td></tr>';
     echo '</table>';
-}
-
-function get_event_rsvp_count($event_id) {
-    $query = new WP_Query([
-        'post_type'      => 'rsvp',
-        'post_status'    => 'publish',
-        'posts_per_page' => -1,
-        'fields'         => 'ids',
-        'meta_query'     => [
-            [
-                'key'   => 'event_id',
-                'value' => $event_id,
-            ],
-        ],
-    ]);
-
-    return $query->found_posts;
-}
-
-
-add_action('rest_api_init', function () {
-    register_rest_route('events/v1', '/event/(?P<id>\d+)', [
-        'methods'  => 'GET',
-        'callback' => 'get_event_with_rsvp',
-        'permission_callback' => '__return_true',
-    ]);
-});
-
-function get_event_with_rsvp($request) {
-    $event_id = intval($request['id']);
-
-    $limit = (int) get_post_meta($event_id, 'rsvp_limit', true);
-    $count = get_event_rsvp_count($event_id);
-    $remaining = max($limit - $count, 0);
-
-    return [
-        'event_id'        => $event_id,
-        'rsvp_limit'      => $limit,
-        'rsvp_count'      => $count,
-        'remaining_seats' => $remaining,
-    ];
 }

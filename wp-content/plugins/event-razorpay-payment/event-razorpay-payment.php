@@ -1,5 +1,4 @@
 <?php
-
 /**
  * Plugin Name: Event Razorpay Payments
  * Description: Razorpay payment integration for event tickets
@@ -7,6 +6,7 @@
  */
 
 if (!defined('ABSPATH')) exit;
+
 if (file_exists(__DIR__ . '/vendor/autoload.php')) {
     require_once __DIR__ . '/vendor/autoload.php';
 }
@@ -15,6 +15,9 @@ use Razorpay\Api\Api;
 use Razorpay\Api\Errors\SignatureVerificationError;
 
 
+/**
+ * Enable CORS
+ */
 add_action('rest_api_init', function () {
 
     remove_filter('rest_pre_serve_request', 'rest_send_cors_headers');
@@ -30,6 +33,9 @@ add_action('rest_api_init', function () {
 }, 15);
 
 
+/**
+ * Register Ticket Order Post Type
+ */
 add_action('init', function () {
 
     register_post_type('ticket_order', [
@@ -40,6 +46,7 @@ add_action('init', function () {
         'supports' => ['title'],
     ]);
 });
+
 
 class Event_Razorpay_Payments
 {
@@ -52,24 +59,26 @@ class Event_Razorpay_Payments
         add_action('rest_api_init', [$this, 'register_routes']);
     }
 
+
     /**
-     * Register REST routes
+     * Register API routes
      */
     public function register_routes()
     {
 
         register_rest_route('events/v1', '/create-order', [
-            'methods'  => ['POST', 'OPTIONS'],
+            'methods' => ['POST', 'OPTIONS'],
             'callback' => [$this, 'create_order'],
             'permission_callback' => '__return_true',
         ]);
 
         register_rest_route('events/v1', '/verify-payment', [
-            'methods'  => ['POST', 'OPTIONS'],
+            'methods' => ['POST', 'OPTIONS'],
             'callback' => [$this, 'verify_payment'],
             'permission_callback' => '__return_true',
         ]);
     }
+
 
     /**
      * Create Razorpay order
@@ -103,6 +112,7 @@ class Event_Razorpay_Payments
                 'amount' => $amount,
                 'key' => $this->key_id,
             ];
+
         } catch (Exception $e) {
 
             return new WP_Error(
@@ -113,6 +123,7 @@ class Event_Razorpay_Payments
         }
     }
 
+
     /**
      * Verify Razorpay payment
      */
@@ -120,7 +131,6 @@ class Event_Razorpay_Payments
     {
 
         $params = $request->get_json_params();
-        
 
         $order_id   = sanitize_text_field($params['razorpay_order_id'] ?? '');
         $payment_id = sanitize_text_field($params['razorpay_payment_id'] ?? '');
@@ -142,8 +152,23 @@ class Event_Razorpay_Payments
 
             $api->utility->verifyPaymentSignature($attributes);
 
+
             /**
-             * Save RSVP / ticket
+             * Check seat availability using shared plugin
+             */
+            $remaining_seats = event_get_remaining_seats($event_id);
+
+            if ($remaining_seats < $quantity) {
+
+                return new WP_Error(
+                    'event_full',
+                    'Not enough seats available'
+                );
+            }
+
+
+            /**
+             * Save ticket order
              */
             $post_id = wp_insert_post([
                 'post_type' => 'ticket_order',
@@ -162,16 +187,19 @@ class Event_Razorpay_Payments
                 update_post_meta($post_id, 'payment_method', 'razorpay');
             }
 
+
             return [
                 'success' => true,
-                'message' => 'Payment verified'
+                'message' => 'Payment verified and ticket booked'
             ];
+
         } catch (SignatureVerificationError $e) {
 
             return new WP_Error(
                 'invalid_signature',
                 'Payment verification failed'
             );
+
         } catch (Exception $e) {
 
             return new WP_Error(
@@ -185,6 +213,9 @@ class Event_Razorpay_Payments
 new Event_Razorpay_Payments();
 
 
+/**
+ * Admin Meta Box
+ */
 add_action('add_meta_boxes', function () {
 
     add_meta_box(
